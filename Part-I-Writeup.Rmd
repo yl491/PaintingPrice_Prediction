@@ -1,0 +1,185 @@
+---
+title: "Part-I-Writeup"
+author: "Anonymous to Everyone"
+date: "12/8/2017"
+output: pdf_document
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r read-data, echo=FALSE,warning=FALSE,include=FALSE}
+library(ggplot2)
+library(GGally)
+library(dplyr)
+load("paintings_train.Rdata")
+load("paintings_test.Rdata")
+paintings_train <- paintings_train %>%
+  mutate(mat_recode = ifelse(mat %in% c("a", "bc", "c"), "metal",
+                             ifelse(mat %in% c("al", "ar", "m"), "stone",
+                                    ifelse(mat %in% c("co", "bt", "t"), "canvas",
+                                           ifelse(mat %in% c("p", "ca"), "paper",
+                                                  ifelse(mat %in% c("b"), "wood",
+                                                         ifelse(mat %in% c("o", "e", "v"), "other",
+                                                                ifelse(mat %in% c("n/a", "",NA), "NotAva",
+                                                                       "uncertain"))))))))
+
+paintings_test <- paintings_test %>%
+  mutate(mat_recode = ifelse(mat %in% c("a", "bc", "c"), "metal",
+                             ifelse(mat %in% c("al", "ar", "m"), "stone",
+                                    ifelse(mat %in% c("co", "bt", "t"), "canvas",
+                                           ifelse(mat %in% c("p", "ca"), "paper",
+                                                  ifelse(mat %in% c("b"), "wood",
+                                                         ifelse(mat %in% c("o", "e", "v"), "other",
+                                                                ifelse(mat %in% c("n/a", "",NA),  "NotAva",
+                                                                       "uncertain"))))))))
+#data cleaning:
+paintings_train <- paintings_train %>%
+  mutate(shape_recode = ifelse(Shape == "", "Not Available",
+                               ifelse(Shape == "ovale", "oval",
+                                      ifelse(Shape == "ronde", "round",
+                                             ifelse(Shape == "octogon", "octagon", Shape)))))
+paintings_test <- paintings_test %>%
+  mutate(shape_recode = ifelse(Shape == "", "Not Available",
+                               ifelse(Shape == "ovale", "oval",
+                                      ifelse(Shape == "ronde", "round",
+                                             ifelse(Shape == "octogon", "octagon", Shape)))))
+
+paintings_test$shape_recode[paintings_test$shape_recode=="octagon"]<-"Not Available"
+paintings_test$shape_recode[paintings_test$shape_recode=="miniature"]<-"Not Available"
+
+paintings_train$Interm[is.na(paintings_train$Interm)]<-"missing"
+paintings_test$Interm[is.na(paintings_test$Interm)]<-"missing"
+#those who are numeric:
+cols=c(2,3,10,11,12,33,23,24,25,26,27,29)
+
+paintings_train[-cols]<-lapply(paintings_train[-cols],factor)
+paintings_test[-cols]<-lapply(paintings_test[-cols],factor)
+paintings_train$Surface[is.na(paintings_test$Surface)]<-0
+paintings_test$Surface[is.na(paintings_test$Surface)]<-0
+
+
+paintings_test$school_pntg[paintings_test$school_pntg=="A"]<-"X"
+paintings_test$school_pntg[paintings_test$school_pntg=="G"]<-"X"
+
+```
+1. Introduction
+\
+For artwork, there is no intrinsic, objective value. The price of paintings might depend on a large range of factors, includes the artists, style of painting, dealers, buyers and so on. In this project, we will help art historian understand what factors drove prices of painting and decide whether paintings might be overvalued or undervalued. We have the original data with 59 possible variables and 1131 observations. The objective of this project is to find the best model that can predict the price of the paintings. 
+
+2. Exploratory data analysis 
+```{r,echo=FALSE,warning=FALSE}
+a<-ggpairs(paintings_train,columns=c(4,6,7,8,9,10))
+a
+```
+\
+We first use ggpairs to see the relationship between different variables and log price. The above graph shows us the distribution of categorical variables and their relationship with logprice. The graph in last row is a feature that we focus on, as the last row represents the relationship between log price and other variables. We want to find the variable that have distinct different mean of logprice in each level. For example, it is very obvious that different type of dealer(four levels) has data gathered into different center. The same with Origin_author. As a result, we include those into our model selection process
+
+```{r,echo=FALSE,warning=FALSE}
+e<-ggpairs(paintings_train,columns=c(27:29,32,10))
+e
+```
+\
+This ggpair graph includes a continuous variable, Surface. Correlation index is the  feature that we look at. For example, the correlation of log price and surface here is relative large, so we propose that surface may is a good predictor in predicting price, so we include it into our model selection process. We can also see a correlated trend between Surface and log price in the last row. The log price is significant different for different levels of materialCat, so we also include that variable into our initial model selection.
+
+```{r,echo=FALSE,warning=FALSE}
+f<-ggpairs(paintings_train,columns=c(36:41,10))
+f
+```
+\
+This ggpairs graph helps us to explore dummy variables.  The last row also represents important features. For example, we can identify that the log price is centered at a place very different for having figures versus not having figure. lrgfont also shows the significant difference between two groups. As a result, we also include figures and lrgfont in the model.
+
+```{r, echo=FALSE}
+ggplot(data = paintings_train, aes(x = engraved, y = logprice, color =engraved)) + geom_boxplot()+facet_wrap(~dealer)
+```
+\
+We use ggplot with different facets to indentify interaction. The boxplots here show that the mean and quantile of log price for painting that is engraved or not engraved is different for different dealers. As a result, we speculate that there is a interaction between this two varaibles. So we add it into our model selection process.
+\
+3. Development and assessment of an initial model (10 points)
+\
+* Initial model: must include a summary table and an explanation/discussion for variable selection and overall amount of variation explained.
+```{r,echo=FALSE,warning=FALSE}
+model1=lm(logprice~year+dealer+origin_cat+lrgfont+Surface+diff_origin+engraved+endbuyer+lands_sc+finished+paired+discauth+type_intermed+origin_cat:arch+dealer:engraved+dealer:paired+shape_recode,data=paintings_train)
+summary(model1)
+```
+\
+The multiple r squared  is 0.6814 and the adjusted r-squared is 0.6653. It means that the model explain 66.53% of the data. As can be seen from the summary, we choose dealer, year, origin_cat, diff_origin, engraved, shape, lrgfont, Surface, endbuyer, lands_sc, finished, paired, discauth, type_intermed and shape as variables and include three interactions: origin_cat:arch, dealer:engraved, dealer:paired. All of the single variables are important according to its p-value. Year of sale influences the price because price depends on the economy trend of the year. Dealers and buyers are the two key marketing forces within the art world and thus we include endbuyers and dealers in the variable. Variables such as origin_cat, diff_origin, engraved, lrgfont, surface, finished are also very important based on the AIC selection. We also add discauth, land_sc, shape,and paired to our model. We treid to include several interactions into our model. Origin_cat might have interaction with variable such as arch, relig and so on. Interactions that can improve the model also include paired & dealer, engraved & dealer and origin_cat &arch interactions.
+
+\
+* Model selection
+\
+We first use ggpairs plot to find the variables that are relatively highly correlated to response and include them in our first model. We also include categorical variables that we think might have influence on the reponse. In addition, we use ggplot with different facet to identify interaction. Besides,we also choose variables based on the some information online and the meaning of different variables. Take Surface as an example, we found that for paintings that are not created by famous artist, it is possible that the price is greatly influenced by the surface area of the paintings since people bought them for decoration in the living room or bedroom, different size can lead to different prices. After the first round chosen, we pick about 20 variables includes year, dealer, origin_cat, diff_origin, nfigures, engraved, prevcoll, lrgfont, finished, figures,shape, othgenre, artistliving, type_intermed, Surface, discauth, paired, othartist, endbuyer,Interm etc. We also choose significant variables and tried to see if their interaction is also significant for the model:original:history, Shape:Surface, origin_cat:arch, paired:dealer, engraved:dealer.
+
+Then, we use AIC to further help us choose variables. Variables such as origin_cat, diff_origin, lrgfont, engraved, finished, dealer, year are very important in the AIC selection. We build our model base on these important variables and gradually add more variables that we consider as fit into our model. 
+
+* Residual Analysis
+```{r,echo=FALSE,warning=FALSE}
+par(mfrow=c(2,2))
+plot(model1,ask=F)
+```
+\
+Looking at the Residuals vs Fitted plot, we see that the red line is perfectly flat. There is no discernible non-linear trend to the residuals. The data appear to be well modeled by a linear relationship between response and predictors, and the points appear to be randomly spread out about the line, with no discerninle non-linear trends or changes in variability. 
+For the Normal Q-Q, residuals are lined well on the straight dashed line, indicates that residuals are normally
+distributed.
+The third graph is the Scale-Location plot. This plot indicates that the residuals are spread equally along the
+ranges of predictors. 
+The forth graph is Residuals vs Leverage. It helps us to find influential cases.There are no points outside the cook's distance and thus there are no influencial points.
+
+* Variables
+\
+Here is the table of our the coefficient of our variables and their confidence intervals.
+```{r,echo=FALSE,warning=FALSE}
+coefficient<-coef(model1)
+confint.df<-confint(model1, approx=FALSE)
+a=cbind(coefficient,confint.df)
+a
+```
+
+4. Summary and Conclusions (10 points)
+
+What is the (median) price for the "baseline" category if there are categorical or dummy variables in the model (add CI's)?  (be sure to include units!) Highlight important findings and potential limitations of your model.  Does it appear that interactions are important?  What are the most important variables and/or interactions?  Provide interprations of how the most important variables influence the (median) price giving a range (CI).  Correct interpretation of coefficients for the log model desirable for full points.
+
+Provide recommendations for the art historian about features or combination of features to look for to find the most valuable paintings.
+\
+Centered Surface Model
+```{r, echo=FALSE}
+
+surfacec<-paintings_train%>%mutate(Surface=scale(Surface, center = TRUE, scale = TRUE))
+modelc<-lm(logprice~year+dealer+origin_cat+lrgfont+Surface+diff_origin+engraved+endbuyer+lands_sc+finished+paired+discauth+type_intermed+origin_cat:arch+dealer:engraved+dealer:paired+shape_recode,data=surfacec)
+confintc.df<-confint(modelc, approx=FALSE)
+```
+\
+The median price for the "baseline" category (i.e., when year=1764, dealer=J, origin_cat=D/FL, endbuyer=X, type_intermed="", and all other dummy variables are at level 0) and centered continous variable Surface is e^3.08 equls 21.76 livre, got from the value of intercept after the continous variable is centered.The median price in this scenerio ranges from 6.613 livre to 71.88 livre.
+\
+Important findings: many variables influence the log price of the paintings, such as the year of sale. At some years, paintings are more popular, while at some years paintings are sold at a lower price. Different type of dealer or the origin of paintings also influence a painting's price. We also notice that bigger painting do will have higher price.
+\
+Potential limitations: we only considered linear relationships in this model; we didn't transfer any predictors. This may lead to predictions that are not accurate enough.
+\
+Interaction: We find one interaction which is the the interaction between arch,whether architectural construction are mentioned in the painting and origin_cat, which represents origin of painting based on dealers’ classification in the catalogue.Another interaction is between dealer and whether the painting is engraved or not. The third interaction is between dealer and whether the painting is paird or not.
+\
+Most important variables:Most of our variables in the model are highly significant, indicating that they are all very important in predictions. Specifically,lrgfont has p values less than 2*10^-16.
+
+\
+Interpretation of most important variables
+\
+Lrgfont is the most important variables because it has a p values less than 2*10^-16. Besides lrgfont, variables such as surface,dealer and origin_cat are also very important as they have small p values. 
+\
+According to the coefficient and CI, one increase in surface of painting in squared inches will increase the price by 1.37 livre, the range of increase is from 1.28 livre to 1.48 livre. If the dealer devotes an additional paragraph for the painting, the price will increase by 2.36 livre, the range of increase is from 1.83 livre to 3.039 livre. For dealers, if take dealer J as the baseline, dealer L increases the price by 12.18 livre,dealer P increases the price by 5.28 livre and dealer R increase the price by 4.54 livre.  
+\
+As a result, we recommend the art historian to look at factors such as the dealer, Surface,lrgfont and the origin of the author when evaluate paintings.
+
+Below are the important coefficients after adjusting from the log model to normal model.
+```{r,echo=FALSE,warning=FALSE}
+coefficient2<-coef(modelc)
+b=cbind(coefficient2,confintc.df)
+adjust<-exp(b)
+choosead<-adjust[18:26,]
+choosead
+```
+
+
+
+

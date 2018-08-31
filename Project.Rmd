@@ -1,0 +1,763 @@
+
+---
+  title: "Project"
+author: "Anonymous to Everyone"
+date: "12/3/2017"
+output: html_document
+---
+  
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+For this project you will take the role of a consultant hired by an Art historian to explore what drove prices of paintings in 18th century Paris.  They have provided you with auction price data from 1764-1780 on the sales (seller/buyer), painter, and other characteristics of paintings. 
+
+## About the Data Analysis Project
+
+The art historian would like to know what factors drove prices of painting, which paintings might be overvalued and which are undervalued.   It is up to you to decide what methods you want to use (frequentist or Bayesian or a combination) to answer these questions, and implement them to help to identify undervalued and overvalued paintings, as well as which features and possible interactions are at play.
+
+
+  ## Code:
+  
+
+### Read in Training Data
+
+To get started read in the training data:
+```{r read-data, echo=TRUE}
+load("paintings_train.Rdata")
+load("paintings_test.Rdata")
+library(ggplot2)
+library(GGally)
+library(dplyr)
+```
+
+The Code Book is in the file `paris_paintings.md` provides more information about the data.
+
+## Part I: Simple Model
+
+### EDA
+
+Using EDA and any numerical summaries get to know the data -  identify what you might consider the 10 best variables for predicting `logprice` using scatterplots with other variables represented using colors or symbols, scatterplot matrices or conditioning plots.  
+```{r}
+paintings_train <- paintings_train %>%
+  mutate(mat_recode = ifelse(mat %in% c("a", "bc", "c"), "metal",
+                             ifelse(mat %in% c("al", "ar", "m"), "stone",
+                                    ifelse(mat %in% c("co", "bt", "t"), "canvas",
+                                           ifelse(mat %in% c("p", "ca"), "paper",
+                                                  ifelse(mat %in% c("b"), "wood",
+                                                         ifelse(mat %in% c("o", "e", "v"), "other",
+                                                                ifelse(mat %in% c("n/a", "",NA), "NotAva",
+                                                                       "uncertain"))))))))
+
+paintings_test <- paintings_test %>%
+  mutate(mat_recode = ifelse(mat %in% c("a", "bc", "c"), "metal",
+                             ifelse(mat %in% c("al", "ar", "m"), "stone",
+                                    ifelse(mat %in% c("co", "bt", "t"), "canvas",
+                                           ifelse(mat %in% c("p", "ca"), "paper",
+                                                  ifelse(mat %in% c("b"), "wood",
+                                                         ifelse(mat %in% c("o", "e", "v"), "other",
+                                                                ifelse(mat %in% c("n/a", "",NA),  "NotAva",
+                                                                       "uncertain"))))))))
+#data cleaning:
+paintings_train <- paintings_train %>%
+  mutate(shape_recode = ifelse(Shape == "", "Not Available",
+                               ifelse(Shape == "ovale", "oval",
+                                      ifelse(Shape == "ronde", "round",
+                                             ifelse(Shape == "octogon", "octagon", Shape)))))
+paintings_test <- paintings_test %>%
+  mutate(shape_recode = ifelse(Shape == "", "Not Available",
+                               ifelse(Shape == "ovale", "oval",
+                                      ifelse(Shape == "ronde", "round",
+                                             ifelse(Shape == "octogon", "octagon", Shape)))))
+
+paintings_test$shape_recode[paintings_test$shape_recode=="octagon"]<-"Not Available"
+paintings_test$shape_recode[paintings_test$shape_recode=="miniature"]<-"Not Available"
+
+paintings_train$Interm[is.na(paintings_train$Interm)]<-"missing"
+paintings_test$Interm[is.na(paintings_test$Interm)]<-"missing"
+#those who are numeric:
+cols=c(2,3,10,11,12,33,23,24,25,26,27,29)
+
+paintings_train[-cols]<-lapply(paintings_train[-cols],factor)
+paintings_test[-cols]<-lapply(paintings_test[-cols],factor)
+paintings_train$Surface[is.na(paintings_test$Surface)]<-0
+paintings_test$Surface[is.na(paintings_test$Surface)]<-0
+
+
+paintings_test$school_pntg[paintings_test$school_pntg=="A"]<-"X"
+paintings_test$school_pntg[paintings_test$school_pntg=="G"]<-"X"
+
+
+
+
+
+
+
+
+summary(paintings_train)
+#ggpairs(Boston,columns=c(2:8,1))
+a<-ggpairs(paintings_train,columns=c(4,6:8,10))
+b<-ggpairs(paintings_train,columns=c(7:9,12,10))
+c<-ggpairs(paintings_train,columns=c(15,19:20,10))
+d<-ggpairs(paintings_train,columns=c(21:26,10))
+e<-ggpairs(paintings_train,columns=c(27:29,32,10))
+f<-ggpairs(paintings_train,columns=c(36:41,10))
+g<-ggpairs(paintings_train,columns=c(40:45,10))
+h<-ggpairs(paintings_train,columns=c(45:50,10))
+i<-ggpairs(paintings_train,columns=c(51:56,10))
+j<-ggpairs(paintings_train,columns=c(57:59,10))
+ 
+```
+
+
+
+### Build your first model
+
+In the first model predict the auction price `price` using the transformation `logprice` using at least 10 up to 20 predictors and any interactions to build a model using linear regression.  You may use stepwise model selection to simplify the model using AIC and/or BIC.  For reference, we will fit the null model to initialize the leaderboard, but replace model1 with your recommended model.
+
+```{r}
+#Try Stepwise AIC&BIC
+kkk<-regsubsets(logprice~year+dealer+origin_cat+engraved+original+prevcoll+othartist+paired+lrgfont+relig+landsALL+lands_sc+lands_figs+shape+arch+mytho+peasant+singlefig+portrait+still_life+discauth+history+allegory+pastorale,data=paintings_train,nvmax=17)
+kkk.sum<-summary(kkk)
+which.min(kkk.sum$cp)
+```
+
+
+```{r}
+model1=lm(logprice~year+dealer+origin_cat+diff_origin+engraved+lrgfont+Surface+endbuyer+lands_sc+finished+paired+discauth+type_intermed+origin_cat:arch+dealer:engraved+dealer:paired+shape_recode,data=paintings_train)
+model1=lm(logprice~year:dealer+origin_cat+diff_origin+engraved+lrgfont+Surface+lands_sc+finished+paired+type_intermed+dealer:school_pntg,data=paintings_train)
+modeli=lm(logprice~year+dealer+origin_cat+diff_origin+engraved+lrgfont+Surface+endbuyer+lands_sc+finished+paired+discauth+type_intermed+origin_cat:arch+dealer:engraved+dealer:paired+shape_recode+year:dealer+origin_cat:diff_origin+dealer:origin_cat+lrgfont:Surface+lrgfont:endbuyer+Surface:finished+lrgfont:paired,data=paintings_train)
+summary(model1)
+
+```
+
+Save predictions and intervals
+```{r predict-model1, echo=FALSE}
+predictions = as.data.frame(
+  exp(predict(model1, newdata=paintings_test, 
+              interval = "pred")))
+save(predictions, file="predict-test.Rdata")
+```
+
+
+### Part I Write up *Due Dec 7*
+
+Once you are satisfied with your model, provide a write up of your data analysis project in a new Rmd file/pdf file: `Part-I-Writeup.Rmd` by copying over salient parts of your R notebook. The written assignment consists of five parts:
+
+1. Introduction: Summary of problem and objectives (5 points)
+For artwork, there is no intrinsic, objective value. The price of paintings might depend on a large range of factors, includes the artist, style of painting, dealer, buyers and so on. In this project, we will help art historian understand what factors drove prices of painting and decide whether paintings might be overvalued or undervalued. We have the original data with 59 possible variables and 1131 observations. The objective of this project is to find that the best model that can predict the price of the paintings(log price). 
+
+2. Exploratory data analysis (10 points): must include three correctly labeled graphs and an explanation that highlight the most important features that went into your model building.
+
+3. Development and assessment of an initial model (10 points)
+* Initial model: must include a summary table and an explanation/discussion for variable selection and overall amount of variation explained. 
+
+```{r}
+summary(model1)
+```
+The multiple r squared  is 0.6041 and the adjusted r-squared is 0.5955. It means that the model explain 59.55% of the data. As can be seen from the summary, we choose year, dealer, origin_car, diff_origin, engraved, lrgfont, Surface, endbuyer, type_intermed, paired and nfigures as variables. All of the variables are important based on its pvalue. 
+
+* Model selection: must include a discussion
+We first use ggpairs plot to find the variables that are relatively highly correlated to response. We choose variables that have a correlation larger than 0.15 and include them in our first model. We also include categorical variables that we think might have incluence on the reponse. Besides looking at ggpairs, we also choose variables base on the some information online and the meaning of different variables. Take Surface as an example, we found that for paintings that are not created by famous artist, it is possible that the price is greatly influenced by the surface area of the paintings since people bought them for decoration in the living room or bedroom, different size can lead to different prices. After the first round chosen, we pick about 20 variables includes year,dealer,origin_cat,diff_origin,nfigures,engraved,prevcoll,lrgfont,finished,figures,lands_elem,othgenre,artistliving,type_intermed,Surface,discauth,paired,othartist,endbuyer,Interm. We also choose significant variables and tried to see if their interaction is also significant for the model:original:history,Shape:Surface.
+Then, we use AIC to further help us choose variables. 
+
+* Residual: must include residual plot(s) and a discussion.  
+```{r}
+par(mfrow=c(2,2))
+plot(model1,ask=F)
+```
+The Residuals vs Fitted shows if residuals have non-linear patterns. The plot is almost completely horizental. The risiduals equallly spread arond the nearly horizental line. This plot shows that the residuals don't have a non-linear patterns.
+For the Normal Q-Q, residuals are lined well on the straight dashed line, indicates that residuals are normally
+distributed.
+The third graph is the Scale-Location plot. This plot indicates that the residuals are spread equally along the
+ranges of predictors. 
+The forth graph is Residuals vs Leverage. It helps us to find influential cases.There are no points outside the cook's distance and thus there are no influencial points.
+
+* Variables: must include table of coefficients and CI
+
+```{r}
+coefficient<-coef(model1)
+confint.df<-confint(model1, approx=FALSE)
+a=cbind(coefficient,confint.df)
+a
+```
+
+4. Summary and Conclusions (10 points)
+
+
+What is the (median) price for the "baseline" category if there are categorical or dummy variables in the model (add CI's)?  (be sure to include units!) Highlight important findings and potential limitations of your model.  Does it appear that interactions are important?  What are the most important variables and/or interactions?  Provide interprations of how the most important variables influence the (median) price giving a range (CI).  Correct interpretation of coefficients for the log model desirable for full points.
+
+Provide recommendations for the art historian about features or combination of features to look for to find the most valuable paintings.
+
+The median price for the "baseline" category (i.e., when year=1764, dealer=J, origin_cat=D/FL, endbuyer=X, type_intermed="", and all other dummy variables are at level 0) and centered continous variable Surface is 2.393, got from the value of intercept.
+Important findings: many variables influence the log price of the paintings, such as the year of sale. At some years, paintings are more popular, while at some years paintings are sold at a lower price.
+Potential limitations: we only considered linear relationships in this model; we didnt transfer any predictors; no proper interaction is found in our model. This may lead to predictions that are not accurate enough.
+Interaction: not found in our model.
+Most important variables:Most of our variables in the model are highly significant, indicating that they are all very important in predictions. Specifically,lrgfont and surface all have p values less than 2*10^-16
+
+
+
+_Points will be deducted for code chunks that should not be included, etc._
+
+*Upload write up  to Sakai*
+
+###  Evaluation on test data for Part I
+
+Once your write up is submitted, your models will be evaluated on the following criteria based on predictions  on the test data (20 points): 
+
+* Bias:  Average (Yhat-Y)  positive values indicate the model tends to overestimate price (on average) while negative values indicate the model tends to underestimate price.
+
+* Maximum Deviation:  Max |Y-Yhat| -  identifies the worst prediction  made in the validation data set.
+
+* Mean Absolute Deviation:  Average |Y-Yhat| - the average error (regardless of sign).
+
+* Root Mean Square Error: Sqrt Average (Y-Yhat)^2
+
+* Coverage:  Average( lwr < Y < upr) 
+
+In order to have a passing wercker badge, your file for predictions needs to be the same length as the test data, with three columns:  fitted values, lower CI and upper CI values in that order with names, fit, lwr, and upr respectively.  
+
+You will be able to see your scores on the score board.  They will be initialized by a prediction based on the mean in the training data.
+
+
+## Part II: Complex Model
+
+In this part you may go all out for constructing a best fitting model for predicting housing prices using methods that we have covered this semester.  You should feel free to to create any new variables (such as quadratic, interaction, or indicator variables, splines, etc) and try different methods, keeping in mind you should be able to explain your methods and results.
+
+Update your predictions using your complex model to provide point estimates and CI.
+#recode by yan
+
+```{r}
+library(Matrix)
+rmse = function(y, ypred) {
+rmse = sqrt(mean((y - ypred)^2)) 
+return(rmse)
+}
+```
+
+#Xgboosting & related recoding
+```{r}
+load("paintings_train.Rdata")
+load("paintings_test.Rdata")
+
+paintings_train$Interm[is.na(paintings_train$Interm)]<-"missing"
+paintings_test$Interm[is.na(paintings_test$Interm)]<-"missing"
+
+#numeric to 0&1（col4,16,22,30,31,32,28）
+paintings_train$authorstyle[paintings_train$authorstyle!='n/a']<-1
+paintings_train$authorstyle[paintings_train$authorstyle=='n/a']<-0
+paintings_test$authorstyle[paintings_test$authorstyle!='n/a']<-1
+paintings_test$authorstyle[paintings_test$authorstyle=='n/a']<-0
+paintings_train$type_intermed[paintings_train$type_intermed!='']<-1
+paintings_train$type_intermed[paintings_train$type_intermed=='']<-0
+paintings_test$type_intermed[paintings_test$type_intermed!='']<-1
+paintings_test$type_intermed[paintings_test$type_intermed=='']<-0
+
+paintings_train$Shape[paintings_train$Shape!='squ_rect']<-1
+paintings_train$Shape[paintings_train$Shape=='squ_rect']<-0
+paintings_test$Shape[paintings_test$Shape!='squ_rect']<-1
+paintings_test$Shape[paintings_test$Shape=='squ_rect']<-0
+
+
+paintings_train$material[paintings_train$material!='toile']<-1
+paintings_train$material[paintings_train$material=='toile']<-0
+paintings_test$material[paintings_test$material!='toile']<-1
+paintings_test$material[paintings_test$material=='toile']<-0
+
+paintings_train$mat[paintings_train$mat!='t']<-1
+paintings_train$mat[paintings_train$mat=='t']<-0
+paintings_test$mat[paintings_test$mat!='t']<-1
+paintings_test$mat[paintings_test$mat=='t']<-0
+
+paintings_train$materialCat[paintings_train$materialCat!='canvas']<-1
+paintings_train$materialCat[paintings_train$materialCat=='canvas']<-0
+paintings_test$materialCat[paintings_test$materialCat!='canvas']<-1
+paintings_test$materialCat[paintings_test$materialCat=='canvas']<-0
+
+#numeric coding:seperate to several dummy variables
+paintings_train$school_pntg_F<-ifelse(paintings_train$school_pntg=="F",1,0)
+paintings_train$school_pntg_DFL<-ifelse(paintings_train$school_pntg=="D/FL",1,0)
+paintings_train$school_pntg_G<-ifelse(paintings_train$school_pntg=="G",1,0)
+paintings_train$school_pntg_I<-ifelse(paintings_train$school_pntg=="I",1,0)
+paintings_train$school_pntg_S<-ifelse(paintings_train$school_pntg=="S",1,0)
+paintings_train$school_pntg_X<-ifelse(paintings_train$school_pntg=="X",1,0)
+paintings_test$school_pntg_F<-ifelse(paintings_test$school_pntg=="F",1,0)#test
+paintings_test$school_pntg_DFL<-ifelse(paintings_test$school_pntg=="D/FL",1,0)
+paintings_test$school_pntg_G<-ifelse(paintings_test$school_pntg=="G",1,0)
+paintings_test$school_pntg_I<-ifelse(paintings_test$school_pntg=="I",1,0)
+paintings_test$school_pntg_S<-ifelse(paintings_test$school_pntg=="S",1,0)
+paintings_test$school_pntg_X<-ifelse(paintings_test$school_pntg=="X",1,0)
+
+paintings_train$origin_author_A<-ifelse(paintings_train$origin_author=="A",1,0)
+paintings_train$origin_author_DFL<-ifelse(paintings_train$origin_author=="D/FL",1,0)
+paintings_train$origin_author_F<-ifelse(paintings_train$origin_author=="F",1,0)
+paintings_train$origin_author_G<-ifelse(paintings_train$origin_author=="G",1,0)
+paintings_train$origin_author_S<-ifelse(paintings_train$origin_author=="S",1,0)
+paintings_train$origin_author_I<-ifelse(paintings_train$origin_author=="I",1,0)
+paintings_test$origin_author_A<-ifelse(paintings_test$origin_author=="A",1,0)#test
+paintings_test$origin_author_DFL<-ifelse(paintings_test$origin_author=="D/FL",1,0)
+paintings_test$origin_author_F<-ifelse(paintings_test$origin_author=="F",1,0)
+paintings_test$origin_author_G<-ifelse(paintings_test$origin_author=="G",1,0)
+paintings_test$origin_author_S<-ifelse(paintings_test$origin_author=="S",1,0)
+paintings_test$origin_author_I<-ifelse(paintings_test$origin_author=="I",1,0)
+
+paintings_train$origin_cat_O<-ifelse(paintings_train$origin_cat=="0",1,0)
+paintings_train$origin_cat_DFL<-ifelse(paintings_train$origin_cat=="D/FL",1,0)
+paintings_train$origin_cat_F<-ifelse(paintings_train$origin_cat=="F",1,0)
+paintings_train$origin_cat_S<-ifelse(paintings_train$origin_cat=="S",1,0)
+paintings_train$origin_cat_I<-ifelse(paintings_train$origin_cat=="I",1,0)
+paintings_test$origin_cat_O<-ifelse(paintings_test$origin_cat=="0",1,0)#test
+paintings_test$origin_cat_DFL<-ifelse(paintings_test$origin_cat=="D/FL",1,0)
+paintings_test$origin_cat_F<-ifelse(paintings_test$origin_cat=="F",1,0)
+paintings_test$origin_cat_S<-ifelse(paintings_test$origin_cat=="S",1,0)
+paintings_test$origin_cat_I<-ifelse(paintings_test$origin_cat=="I",1,0)
+
+paintings_train$endbuyer_B<-ifelse(paintings_train$endbuyer=="B",1,0)
+paintings_train$endbuyer_C<-ifelse(paintings_train$endbuyer=="C",1,0)
+paintings_train$endbuyer_D<-ifelse(paintings_train$endbuyer=="D",1,0)
+paintings_train$endbuyer_E<-ifelse(paintings_train$endbuyer=="E",1,0)
+paintings_train$endbuyer_U<-ifelse(paintings_train$endbuyer=="U",1,0)
+paintings_train$endbuyer_blank<-ifelse(paintings_train$endbuyer=="",1,0)
+paintings_test$endbuyer_B<-ifelse(paintings_test$endbuyer=="B",1,0)#test
+paintings_test$endbuyer_C<-ifelse(paintings_test$endbuyer=="C",1,0)
+paintings_test$endbuyer_D<-ifelse(paintings_test$endbuyer=="D",1,0)
+paintings_test$endbuyer_E<-ifelse(paintings_test$endbuyer=="E",1,0)
+paintings_test$endbuyer_U<-ifelse(paintings_test$endbuyer=="U",1,0)
+paintings_test$endbuyer_blank<-ifelse(paintings_test$endbuyer=="",1,0)
+
+paintings_train$winningbiddertype_D<-ifelse(paintings_train$winningbiddertype=="D",1,0)
+paintings_train$winningbiddertype_C<-ifelse(paintings_train$winningbiddertype=="C",1,0)
+paintings_train$winningbiddertype_DC<-ifelse(paintings_train$winningbiddertype=="DC",1,0)
+paintings_train$winningbiddertype_E<-ifelse(paintings_train$winningbiddertype=="E",1,0)
+paintings_train$winningbiddertype_U<-ifelse(paintings_train$winningbiddertype=="U",1,0)
+paintings_train$winningbiddertype_blank<-ifelse(paintings_train$winningbiddertype=="",1,0)
+paintings_test$winningbiddertype_D<-ifelse(paintings_test$winningbiddertype=="D",1,0)#test
+paintings_test$winningbiddertype_C<-ifelse(paintings_test$winningbiddertype=="C",1,0)
+paintings_test$winningbiddertype_DC<-ifelse(paintings_test$winningbiddertype=="DC",1,0)
+paintings_test$winningbiddertype_E<-ifelse(paintings_test$winningbiddertype=="E",1,0)
+paintings_test$winningbiddertype_U<-ifelse(paintings_test$winningbiddertype=="U",1,0)
+paintings_test$winningbiddertype_blank<-ifelse(paintings_test$winningbiddertype=="",1,0)
+
+
+paintings_train$Surface[is.na(paintings_train$Surface)]<-median(paintings_train$Surface,na.rm=TRUE)
+paintings_test$Surface[is.na(paintings_test$Surface)]<-median(paintings_test$Surface,na.rm=TRUE)
+paintings_train$Height_in[is.na(paintings_train$Height_in)]<-paintings_train$Diam_in[is.na(paintings_train$Height_in)]
+paintings_train$Height_in[is.na(paintings_train$Height_in)]<-0
+paintings_test$Height_in[is.na(paintings_test$Height_in)]<-paintings_test$Diam_in[is.na(paintings_test$Height_in)]
+
+paintings_test$Height_in[is.na(paintings_test$Height_in)]<-0
+
+paintings_train$Width_in[is.na(paintings_train$Width_in)]<-paintings_train$Diam_in[is.na(paintings_train$Width_in)]
+paintings_train$Width_in[is.na(paintings_train$Width_in)]<-0
+paintings_test$Width_in[is.na(paintings_test$Width_in)]<-paintings_test$Diam_in[is.na(paintings_test$Width_in)]
+paintings_test$Width_in[is.na(paintings_test$Width_in)]<-0
+
+paintings_train[is.na(paintings_train)]<-"missing"
+paintings_test[is.na(paintings_test)]<-"missing"
+
+
+paintings_train<-paintings_train%>%select(-subject,-author,-lot,-authorstandard,-winningbidder,-sale,-year,-price,-count,-Surface_Rect,-Surface_Rnd,-Diam_in)
+paintings_test<-paintings_test%>%select(-subject,-author,-lot,-authorstandard,-winningbidder,-sale,-year,-price,-count,-Surface_Rect,-Surface_Rnd,-Diam_in)
+#Now, col(2,3,4,5,10,11) still chr:dealer, origin_author, origin_cat, school_pntg,winningbiddertype, endbuyer are recode and new variables are created at the end 
+
+#recode all other chr to num
+eliminate<-c(2,3,4,5,10,11)
+for(i in 1:length(paintings_train))
+{
+  if(i %in% eliminate)
+  {
+    
+  }else{
+    paintings_train[,i]<-as.numeric(paintings_train[,i])
+    paintings_test[,i]<-as.numeric(paintings_test[,i])
+  }
+}
+
+bst <- xgboost(data = data.matrix(paintings_train[,-c(2,3,4,5,10,11,12)]), label = paintings_train$logprice, max_depth = 6, eta = 0.01,min_child_weight=1,nrounds=950)
+importance_matrix <- xgb.importance(model = bst)
+print(importance_matrix)
+xgb.plot.importance(importance_matrix = importance_matrix)
+
+# predictions = as.data.frame(
+#   exp(predict(bst, newdata=data.matrix(paintings_test) 
+#               )))
+# colnames(predictions)<-"fit"
+# save(predictions, file="predict-test.Rdata")
+
+```
+
+#BART: Same recoding as Xgboost: both requires numeric input
+```{r}
+library(BayesTree)
+set.seed(42)
+
+cols_to_remove<-c(2,3,10,11,12,13,14,17,18,25,26,27)
+
+bart.model = bart(x.train=paintings_train[-cols_to_remove],
+y.train=as.numeric(paintings_train$logprice),
+x.test=paintings_test[-cols_to_remove],sigdf=10, sigquant=0.99,
+   k=10,
+verbose=FALSE )
+
+# predictions<-as.data.frame(exp(bart.model$yhat.test.mean))
+# colnames(predictions)<-"fit"
+# save(predictions, file="predict-test.Rdata")
+```
+
+
+#Boosting with gbm & relevant recoding
+```{r}
+library(gbm)
+load("paintings_train.Rdata")
+load("paintings_test.Rdata")
+
+paintings_train$Surface[is.na(paintings_train$Surface)]<-median(paintings_train$Surface,na.rm=TRUE)
+paintings_test$Surface[is.na(paintings_test$Surface)]<-median(paintings_test$Surface,na.rm=TRUE)
+
+mhr<-median(paintings_train$Height,na.rm=TRUE)
+mhe<-median(paintings_test$Height,na.rm=TRUE)
+paintings_train$Height_in[is.na(paintings_train$Height_in)]<-paintings_train$Diam_in[is.na(paintings_train$Height_in)]
+paintings_train$Height_in[is.na(paintings_train$Height_in)]<-mhr
+paintings_test$Height_in[is.na(paintings_test$Height_in)]<-paintings_test$Diam_in[is.na(paintings_test$Height_in)]
+paintings_test$Height_in[is.na(paintings_test$Height_in)]<-mhe
+
+whr<-median(paintings_train$Width_in,na.rm=TRUE)
+whe<-median(paintings_test$Width_in,na.rm=TRUE)
+paintings_train$Width_in[is.na(paintings_train$Width_in)]<-paintings_train$Diam_in[is.na(paintings_train$Width_in)]
+paintings_train$Width_in[is.na(paintings_train$Width_in)]<-whr
+paintings_test$Width_in[is.na(paintings_test$Width_in)]<-paintings_test$Diam_in[is.na(paintings_test$Width_in)]
+paintings_test$Width_in[is.na(paintings_test$Width_in)]<-whe
+
+cols=c(3,10,11,12,33,23,24,25,26,27,29)#lot should be factor
+paintings_train[-cols]<-lapply(paintings_train[-cols],factor)
+paintings_test[-cols]<-lapply(paintings_test[-cols],factor)
+paintings_train.e<-paintings_train%>%dplyr::select(-price,-count)
+paintings_train2<-paintings_train%>%dplyr::select(-price,-count)
+paintings_train2[,1:58]<-lapply(paintings_train2[,1:57],factor)
+
+
+bs.nes=gbm(as.numeric(logprice) ~ .-subject-author-lot-authorstandard-winningbidder, distribution = "gaussian",data=paintings_train.e,n.trees = 300,interaction.depth =7,shrinkage = 0.03)
+
+prediction = as.data.frame(
+  exp(predict(bs.nes, newdata=paintings_test, n.trees=300
+
+              )))
+colnames(prediction)<-"fit"
+
+
+# pred.train<-exp(predict(bs.nes, newdata=paintings_train, n.trees=300
+#               ))
+# paintings_train$price<-paintings_train$price%>%str_replace_all(",","")%>%as.numeric()
+# rmse(pred.train,paintings_train$price)
+
+
+bs.up=gbm(as.numeric(logprice) ~ .-subject-author-lot-authorstandard-winningbidder, distribution = list(name="quantile",alpha=0.975),data=paintings_train.e,n.trees = 300,interaction.depth = 7,shrinkage=0.03)
+load("best-pred.Rdata")
+prediction_upper = as.data.frame(
+  exp(predict(bs.up, newdata=paintings_test, n.trees=300
+              )))
+colnames(prediction_upper)<-"upr"
+
+bs.low=gbm(as.numeric(logprice) ~ .-subject-author-lot-authorstandard-winningbidder, distribution = list(name="quantile",alpha=0.025),data=paintings_train.e,n.trees = 300,interaction.depth = 7,shrinkage=0.03)
+
+prediction_lower = as.data.frame(
+  exp(predict(bs.low, newdata=paintings_test, n.trees=300
+              )))
+colnames(prediction_lower)<-"lwr"
+
+predictions<-cbind(prediction_lower,prediction,prediction_upper)
+
+
+save(predictions, file="predict-test.Rdata")
+
+mm<-paintings_train$price-pred.train
+mmm<-plot(mm~pred.train)
+save(mm,pred.train,file="residualplot.Rdata")
+
+
+
+# save(bs.nes,file="best-pred.Rdata")#currently 1338  300 7 0.03
+
+```
+
+
+#Random Forest & Relevant Recoding
+```{r}
+load("paintings_train.Rdata")
+load("paintings_test.Rdata")
+
+aa<-unique(paintings_train$winningbiddertype)
+for (i in 1:nrow(paintings_test))
+{
+  if(paintings_test$winningbiddertype[i] %in% aa)
+  {
+    
+  }else{
+    paintings_test$winningbiddertype[i]<-"U"
+  }
+}
+
+
+paintings_train <- paintings_train %>%
+mutate(shape_recode = ifelse(Shape == "", "Not Available",
+ifelse(Shape == "ovale", "oval",
+ifelse(Shape == "ronde", "round",
+ifelse(Shape == "octogon", "octagon", Shape)))))
+paintings_test <- paintings_test %>%
+mutate(shape_recode = ifelse(Shape == "", "Not Available",
+ifelse(Shape == "ovale", "oval",
+ifelse(Shape == "ronde", "round",
+ ifelse(Shape == "octogon", "octagon", Shape)))))
+paintings_test$shape_recode<-as.factor(paintings_test$shape_recode)
+paintings_train$shape_recode<-as.factor(paintings_train$shape_recode)
+
+paintings_test$shape_recode[paintings_test$shape_recode=="octagon"]<-"Not Available"
+paintings_test$shape_recode[paintings_test$shape_recode=="miniature"]<-"Not Available"
+
+paintings_train$Interm[is.na(paintings_train$Interm)]<-"missing"
+paintings_test$Interm[is.na(paintings_test$Interm)]<-"missing"
+
+paintings_test$school_pntg[paintings_test$school_pntg=="A"]<-"X"
+# paintings_test$school_pntg[paintings_test$school_pntg=="G"]<-"X"
+
+cols=c(2,3,10,11,12,33,23,24,25,26,27,29)
+
+paintings_train[-cols]<-lapply(paintings_train[-cols],factor)
+paintings_test[-cols]<-lapply(paintings_test[-cols],factor)
+
+aa<-levels(paintings_train$winningbiddertype)
+
+
+paintings_train$Surface[is.na(paintings_train$Surface)]<-0
+paintings_test$Surface[is.na(paintings_test$Surface)]<-0
+
+paintings_train$Height_in[is.na(paintings_train$Height_in)]<-paintings_train$Diam_in[is.na(paintings_train$Height_in)]
+paintings_train$Height_in[is.na(paintings_train$Height_in)]<-0
+paintings_test$Height_in[is.na(paintings_test$Height_in)]<-paintings_test$Diam_in[is.na(paintings_test$Height_in)]
+paintings_test$Height_in[is.na(paintings_test$Height_in)]<-0
+
+paintings_train$Width_in[is.na(paintings_train$Width_in)]<-paintings_train$Diam_in[is.na(paintings_train$Width_in)]
+paintings_train$Width_in[is.na(paintings_train$Width_in)]<-0
+paintings_test$Width_in[is.na(paintings_test$Width_in)]<-paintings_test$Diam_in[is.na(paintings_test$Width_in)]
+paintings_test$Width_in[is.na(paintings_test$Width_in)]<-0
+
+cols_num<-c(23,24)
+paintings_train[,23]<-as.numeric(paintings_train[,23])
+paintings_train[,24]<-as.numeric(paintings_train[,24])
+paintings_test[,23]<-as.numeric(paintings_test[,23])
+paintings_test[,24]<-as.numeric(paintings_test[,24])
+
+paintings_train[is.na(paintings_train)]<-"missing"
+paintings_test[is.na(paintings_test)]<-"missing"
+
+
+
+
+
+train<-paintings_train[c("logprice","winningbiddertype","type_intermed","materialCat","endbuyer","shape_recode","school_pntg","sale","dealer","year","origin_author","origin_cat","diff_origin","artistliving","Interm","Height_in","Width_in","Surface","nfigures","engraved","original","prevcoll","othartist","paired","figures","finished","lrgfont","relig","landsALL","lands_sc","lands_elem","lands_figs","lands_ment","arch","mytho","peasant","othgenre","singlefig","portrait","still_life","discauth","history","allegory","pastorale")]
+test<-paintings_test[c("logprice","winningbiddertype","type_intermed","materialCat","endbuyer","shape_recode","school_pntg","sale","dealer","year","origin_author","origin_cat","diff_origin","artistliving","Interm","Height_in","Width_in","Surface","nfigures","engraved","original","prevcoll","othartist","paired","figures","finished","lrgfont","relig","landsALL","lands_sc","lands_elem","lands_figs","lands_ment","arch","mytho","peasant","othgenre","singlefig","portrait","still_life","discauth","history","allegory","pastorale")]
+
+
+xtest <- rbind(train[1, ] , test)
+xtest <- xtest[-1,]
+#remove mat matcat winning bidder 
+library(randomForest)
+rf.paintings = randomForest(logprice ~endbuyer+type_intermed+shape_recode+school_pntg+sale+dealer+year+origin_author+origin_cat+diff_origin+artistliving+Interm+Height_in+Width_in+Surface+nfigures+engraved+original+prevcoll+othartist+paired+figures+finished+lrgfont+relig+landsALL+lands_sc+lands_elem+lands_figs+lands_ment+arch+mytho+peasant+othgenre+singlefig+portrait+still_life+discauth+history++allegory+pastorale,data=train, mtry=20, importance =TRUE) 
+#
+yhat.rf= predict(rf.paintings ,newdata =xtest)
+
+predictions<-as.data.frame(exp(yhat.rf))
+colnames(predictions)<-"fit"
+save(predictions, file="predict-test.Rdata")
+#currently best:1800 4 0.005
+```
+
+#BMA - same recoding as random forest
+```{r}
+library(BAS)
+
+bma.paintings<-bas.lm(logprice ~materialCat+endbuyer+type_intermed+shape_recode+school_pntg+sale+dealer+year+origin_author+origin_cat+diff_origin+artistliving+Interm+Height_in+Width_in+Surface+nfigures+engraved+original+prevcoll+othartist+paired+figures+finished+lrgfont+relig+landsALL+lands_sc+lands_elem+lands_figs+lands_ment+arch+mytho+peasant+othgenre+singlefig+portrait+still_life+discauth+history+artistliving:lands_sc+school_pntg:endbuyer+type_intermed:original+dealer:shape_recode,data=train,prior="g-prior",alpha=nrow(train),modelprior=uniform(),method="MCMC", MCMC.iterations = 3000000, thin = 20)
+
+pred = predict(bma.paintings, newdata=xtest, estimator="BMA",prediction=T)
+predictions = as.data.frame(
+  exp(pred$fit))
+colnames(predictions)<-"fit"
+save(predictions, file="predict-test.Rdata")
+```
+
+
+#Lasso
+```{r}
+sum(is.na(paintings_train[,c(1)]))
+library(glmnet)
+best.lambda = cv.glmnet(as.matrix(paintings_train[,-c(2,3,4,5,7,10,11,12)]), (paintings_train[,7]),alpha=1)$lambda.1se
+
+colglm<-glmnet(as.matrix(paintings_train[,-c(2,3,4,5,7,10,11,12)]), (paintings_train[,7]),alpha=1)
+coef_pred<-predict(colglm,type="coefficients",best.lambda,newx=paintings_train[,-c(2,3,4,5,7,10,11,12)])
+coef_pred
+
+predictions<-exp(predict(colglm,best.lambda,newx=as.matrix(paintings_test[,-c(2,3,4,5,7,10,11,12)])))
+colnames(predictions)<-"fit"
+save(predictions, file="predict-test.Rdata")
+
+```
+
+```{r}
+library(monomvn)
+temp<-scale(paintings_train[,-c(2,3,10,11,12,13,14,16,17,18,25,26,27)],colMeans(paintings_train[,-c(2,3,10,11,12,13,14,16,17,18,25,26,27)]),apply(paintings_train[,-c(2,3,10,11,12,13,14,16,17,18,25,26,27)],2,sd))
+x.m = attr(temp, "scaled:center")
+x.s = attr(temp, "scaled:scale")
+
+lasso_bla<-blasso(as.matrix(paintings_train[,-c(2,3,10,11,12,13,14,16,17,18,25,26,27)]), (paintings_train[,10]), RJ=FALSE, case="default",verb=0,normalize=FALSE)
+
+ypred = mean(lasso_bla$mu)+as.matrix(paintings_test[,-c(2,3,10,11,12,13,14,16,17,18,25,26,27)])%*% apply(lasso_bla$beta, 2, mean)
+predictions=as.data.frame(exp(ypred))
+
+colnames(predictions)<-"fit"
+save(predictions, file="predict-test.Rdata")
+```
+
+#Preparing validation dataset
+```{r}
+#prepare validation
+load("paintings_validation.Rdata")
+paintings_validation$Surface[is.na(paintings_validation$Surface)]<-median(paintings_validation$Surface,na.rm=TRUE)
+mhr<-median(paintings_validation$Height,na.rm=TRUE)
+paintings_validation$Height_in[is.na(paintings_validation$Height_in)]<-paintings_validation$Diam_in[is.na(paintings_validation$Height_in)]
+paintings_validation$Height_in[is.na(paintings_validation$Height_in)]<-mhr
+whr<-median(paintings_validation$Width_in,na.rm=TRUE)
+paintings_validation$Width_in[is.na(paintings_validation$Width_in)]<-paintings_validation$Diam_in[is.na(paintings_validation$Width_in)]
+paintings_validation$Width_in[is.na(paintings_validation$Width_in)]<-whr
+cols=c(3,10,11,12,33,23,24,25,26,27,29)#lot should be factor
+paintings_validation[-cols]<-lapply(paintings_validation[-cols],factor)
+
+load("paintings_train.Rdata")
+load("paintings_test.Rdata")
+paintings_train$Surface[is.na(paintings_train$Surface)]<-median(paintings_train$Surface,na.rm=TRUE)
+paintings_test$Surface[is.na(paintings_test$Surface)]<-median(paintings_test$Surface,na.rm=TRUE)
+
+mhr<-median(paintings_train$Height,na.rm=TRUE)
+mhe<-median(paintings_test$Height,na.rm=TRUE)
+paintings_train$Height_in[is.na(paintings_train$Height_in)]<-paintings_train$Diam_in[is.na(paintings_train$Height_in)]
+paintings_train$Height_in[is.na(paintings_train$Height_in)]<-mhr
+paintings_test$Height_in[is.na(paintings_test$Height_in)]<-paintings_test$Diam_in[is.na(paintings_test$Height_in)]
+paintings_test$Height_in[is.na(paintings_test$Height_in)]<-mhe
+
+whr<-median(paintings_train$Width_in,na.rm=TRUE)
+whe<-median(paintings_test$Width_in,na.rm=TRUE)
+paintings_train$Width_in[is.na(paintings_train$Width_in)]<-paintings_train$Diam_in[is.na(paintings_train$Width_in)]
+paintings_train$Width_in[is.na(paintings_train$Width_in)]<-whr
+paintings_test$Width_in[is.na(paintings_test$Width_in)]<-paintings_test$Diam_in[is.na(paintings_test$Width_in)]
+paintings_test$Width_in[is.na(paintings_test$Width_in)]<-whe
+
+cols=c(3,10,11,12,33,23,24,25,26,27,29)#lot should be factor
+paintings_train[-cols]<-lapply(paintings_train[-cols],factor)
+paintings_test[-cols]<-lapply(paintings_test[-cols],factor)
+paintings_train.e<-paintings_train%>%dplyr::select(-price,-count)
+paintings_test.e<-paintings_test%>%dplyr::select(-price,-count)
+paintings_train2<-rbind(paintings_train.e,paintings_test.e)
+paintings_train22<-rbind(paintings_train,paintings_test)
+
+
+bs.nes2=gbm(as.numeric(logprice) ~ .-subject-author-authorstandard-winningbidder-lot, distribution = "gaussian",data=paintings_train2,n.trees = 300,interaction.depth =7,shrinkage = 0.03)
+
+prediction2 = as.data.frame(
+  exp(predict(bs.nes2, newdata=paintings_validation, n.trees=300
+
+              )))
+colnames(prediction2)<-"fit"
+
+
+# pred.train<-exp(predict(bs.nes2, newdata=paintings_train22, n.trees=300
+#         ))
+# paintings_train22$price<-paintings_train22$price%>%str_replace_all(",","")%>%as.numeric()
+# rmse(pred.train,paintings_train22$price)
+
+
+#upper bound
+bs.up2=gbm(as.numeric(logprice) ~ .-subject-author-lot-authorstandard-winningbidder, distribution = list(name="quantile",alpha=0.975),data=paintings_train2,n.trees = 300,interaction.depth = 7,shrinkage=0.03)
+prediction_upper2 = as.data.frame(
+  exp(predict(bs.up2, newdata=paintings_validation, n.trees=300
+              )))
+colnames(prediction_upper2)<-"upr"
+#lowerbound
+bs.low2=gbm(as.numeric(logprice) ~ .-subject-author-lot-authorstandard-winningbidder, distribution = list(name="quantile",alpha=0.025),data=paintings_train2,n.trees = 300,interaction.depth = 7,shrinkage=0.03)
+prediction_lower2 = as.data.frame(
+  exp(predict(bs.low2, newdata=paintings_validation, n.trees=300
+              )))
+colnames(prediction_lower2)<-"lwr"
+#combine three column
+predictions<-cbind(prediction_lower2,prediction2,prediction_upper2)
+save(predictions, file="prediction-validation.Rdata")
+save(predictions, file="predict-validation.Rdata")
+# 2 versions of file names below, not sure which to use so we save to both.
+
+```
+
+You may iterate here as much as you like exploring different models until you are satisfied with your results, however keep in mind you must be able to explain your results to the art historian.
+
+### Part II: Write Up
+
+Once you are satisfied with your model, provide a write up of your data analysis project in a new Rmd file/pdf file: `Part-II-Writeup.Rmd` by copying over salient parts of your R notebook and the previous writeup (you should also save the pdf version) The written assignment consists of five parts:
+
+1. Introduction (1 point if improved from before)
+  add previous intro with any edits
+
+2. Exploratory data analysis (1 point if improved from before): 
+   add previous EDA
+   
+3. Discussion of preliminary model Part I (5 points)
+Discuss performance based on leader board results and suggested refinements.
+
+4.  Development of the final model (20 points)
+
+* Final model: must include a summary table
+
+* Variables: must include an explanation
+
+* Variable selection/shrinkage: must use appropriate method and include an explanation
+
+
+* Residual: must include a residual plot and a discussion
+
+* discussion of how prediction intervals obtained 
+
+5. Assessment of the final model (25 points)
+
+
+* Model evaluation: must include an evaluation discussion
+
+* Model testing : must include a discussion
+
+* Model result: must include a selection and discussion of the top 10 valued  paintings in the validation data.
+
+6. Conclusion (10 points): must include a summary of results and a discussion of things learned. Optional what would you do if you had more time.
+
+
+
+### Final Predictions Validation (20 points)
+Create predictions for the validation data from your final model using the dataframe `paintings_validation.Rdata` in your repo.  You may refit your final model to the combined training and test data.  Write predictions out to a file `prediction-validation.Rdata`
+This should have the same format as the model output in Part I and II.
+
+
+## Final: Class Presentations and Peer Evaluation
+
+Each Group should prepare 5 slides in their Github repo:  (save as slides.pdf)
+
+* Most interesting graphic  _a picture (painting) is worth a thousand words prize!_  
+
+* Best Model (motivation, how you found it, why you think it is best)
+
+* Best Insights into predicting Price.
+
+* 3 Best Paintings to purchase  (and why) (images are a bonus!)
+
+* Best Team Name/Graphic
+
+We will select winners based on the above criteria and overall performance.
+
+
+Finally your repo should have: `Part-I-Writeup.Rmd`, `Part-I-Writeup.pdf`,  `Part-II-Writeup.Rmd`, `Part-II-Writeup.pdf`,`slides.Rmd` (and whatever output you use for the presentation) and `predict-train.Rdata`,  `predict-test.Rdata` `predict-validation.Rdata`.
+
